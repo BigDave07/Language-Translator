@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Translator</title>
+    <style>
+      body {
+        font-family: Cambria, Cochin, Georgia, Times, "Times New Roman", serif;
+        margin: 0;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 40px auto;
+        background: rgb(238, 141, 15);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
+      }
+      h1 {
+        margin: 0 0 8px;
+        align-content: center;
+      }
+      .sub {
+        color: #666;
+        margin-bottom: 20px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 140px;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid #ddd;
+        font-size: 16px;
+        resize: vertical;
+      }
+      select,
+      button,
+      input {
+        border-radius: 12px;
+        border: 1px solid #ddd;
+        padding: 10px 12px;
+        font-size: 15px;
+      }
+      .controls {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin: 12px 0 16px;
+      }
+      button {
+        cursor: pointer;
+        border: 0;
+        background: #111;
+        color: #fff;
+      }
+      
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .out {
+        background: #fafafa;
+        border: 1px dashed #ccc;
+        min-height: 120px;
+        padding: 12px;
+        border-radius: 12px;
+        white-space: pre-wrap;
+      }
+      .muted {
+        color: #777;
+        font-size: 13px;
+      }
+      .badge {
+        display: inline-block;
+        background: #eef;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        margin-left: 8px;
+      }
+    </style>
+  </head>
+  <body>
+  <div class="wrap">
+    <h1>Language Translator <span class="badge">Google Cloud</span></h1>
+    <p class="sub">Type anything, pick a language, and translate. Source can be “Auto”.</p>
+
+    <div class="controls">
+      <label>Source:
+        <select id="source">
+          <option value="auto" selected>Auto</option>
+        </select>
+      </label>
+        <button id="swap">Swap</button>
+      <label>Target:
+        <select id="target"></select>
+      </label>
+
+      <button id="btn">Translate</button>
+      <span id="status" class="muted"></span>
+
+      <button id="copy">Copy</button>
+    </div>
+
+    <div class="row">
+      <textarea id="input" placeholder="Enter text (any language)"></textarea>
+      <div class="out" id="output"></div>
+    </div>
+  </div>
+
+  <script>
+    const sourceSel = document.getElementById("source");
+    const targetSel = document.getElementById("target");
+    const inputEl   = document.getElementById("input");
+    const outputEl  = document.getElementById("output");
+    const btn       = document.getElementById("btn");
+    const statusEl  = document.getElementById("status");
+    const swapEL = document.getElementById("swap");
+
+    async function loadLanguages() {
+      statusEl.textContent = "Loading languages...";
+      try {
+        const res = await fetch("/api/languages");
+        const data = await res.json();              // <-- await
+        const langs = data.languages || [];
+        for (const { language, name } of langs) {
+          const t = document.createElement("option");
+          t.value = language; t.textContent = `${name} (${language})`;
+          targetSel.appendChild(t);
+
+          const s = document.createElement("option");
+          s.value = language; s.textContent = `${name} (${language})`;
+          sourceSel.appendChild(s);
+        }
+        targetSel.value = "en";
+        statusEl.textContent = "";
+      } catch (e) {
+        statusEl.textContent = "Failed to load languages.";
+        console.error(e);
+      }
+    }
+
+    async function translate() {
+      const text = inputEl.value.trim();
+      const target = targetSel.value;
+      const source = sourceSel.value;
+
+      if (!text) { outputEl.textContent = "Please enter text to translate."; return; }
+
+      btn.disabled = true;
+      statusEl.textContent = "Translating...";
+      outputEl.textContent = "";
+
+      try {
+        const res = await fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, target, source })
+        });
+        const data = await res.json();
+        if (data.error) {
+          outputEl.textContent = `Error: ${data.error}`;
+        } else {
+          const { translatedText, detectedSourceLanguage } = data;
+          outputEl.textContent = translatedText || "(no result)";
+          statusEl.textContent = (source === "auto" && detectedSourceLanguage)
+            ? `Detected: ${detectedSourceLanguage}`
+            : "";
+        }
+      } catch (e) {
+        outputEl.textContent = "Network or server error. Check console.";
+        console.error(e);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    btn.addEventListener("click", translate);
+    window.addEventListener("DOMContentLoaded", loadLanguages);
+
+    swapEL.addEventListener("click", () => {
+        const s = sourceSel.value, t = targetSel.value;
+        if (t!="auto") sourceSel.value = t;
+        if (s!="auto") targetSel.value = s;
+        if (outputEl.textContent) { inputEl.value = outputEl.textContent; outputEl.textContent = ""; }
+    });
+
+    
+  copy.onclick = async () => { try { await navigator.clipboard.writeText(outputEl.textContent || ""); } catch {} };
+  </script>
+</body>
